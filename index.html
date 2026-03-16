@@ -1,0 +1,15 @@
+async function send() {
+    const msg = document.getElementById('msg').value;
+    // СЮДА ВСТАВЬ СВОЙ URL, КОТОРЫЙ ТЫ ПОЛУЧИЛ ПРИ ДЕПЛОЕ
+    await fetch('https://script.google.com/macros/s/AKfycbz1Qs_gntM888L19jM7NpJBu2HBEaP9V8VpPP4rPU1mV74KdlX-ZF2PMUSxiHfT3USN/exec', {
+        method: 'POST',
+        body: JSON.stringify({ user: 'Максим', msg: msg })
+    });
+    document.getElementById('msg').value = '';
+}
+
+async function load() {
+    const res = await fetch('ТВОЙ_URL_ИЗ_APPS_SCRIPT');
+    const data = await res.json();
+    document.getElementById('chat').innerHTML = data.map(m => `<div>${m.text}</div>`).join('');
+}
