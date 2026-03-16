@@ -3,42 +3,150 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Максим</title>
+    <title>Максим - Мессенджер</title>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; max-width: 400px; margin: 20px auto; background: #f0f2f5; }
-        #chat { background: white; height: 400px; overflow-y: auto; padding: 15px; border-radius: 10px; border: 1px solid #ddd; display: flex; flex-direction: column; gap: 8px; }
-        .msg { background: #e9ecef; padding: 8px 12px; border-radius: 15px; align-self: flex-start; }
-        input { width: 100%; padding: 10px; margin-top: 10px; border: 1px solid #ddd; border-radius: 5px; box-sizing: border-box; }
-        button { width: 100%; padding: 10px; margin-top: 5px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        :root { --primary: #0084ff; --bg: #f0f2f5; --msg-in: #ffffff; --msg-out: #dcf8c6; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: var(--bg); margin: 0; display: flex; flex-direction: column; height: 100vh; }
+        
+        /* Группы */
+        #rooms { background: #fff; padding: 10px; display: flex; gap: 10px; border-bottom: 1px solid #ddd; overflow-x: auto; }
+        .room-btn { padding: 5px 15px; border-radius: 20px; border: 1px solid var(--primary); background: transparent; cursor: pointer; white-space: nowrap; }
+        .room-btn.active { background: var(--primary); color: white; }
+
+        /* Чат */
+        #chat { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 10px; }
+        .msg { max-width: 80%; padding: 10px; border-radius: 12px; position: relative; box-shadow: 0 1px 2px rgba(0,0,0,0.1); word-wrap: break-word; }
+        .msg.out { align-self: flex-end; background: var(--msg-out); }
+        .msg.in { align-self: flex-start; background: var(--msg-in); }
+        .author { font-size: 0.7em; color: #888; margin-bottom: 4px; font-weight: bold; }
+        .media { max-width: 100%; border-radius: 8px; margin-top: 5px; }
+        
+        /* Управление */
+        #controls { background: white; padding: 10px; border-top: 1px solid #ddd; display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center; }
+        #nick-box { padding: 10px; background: #eee; display: flex; gap: 5px; font-size: 0.9em; }
+        input[type="text"] { padding: 10px; border: 1px solid #ddd; border-radius: 20px; outline: none; }
+        button { background: var(--primary); color: white; border: none; padding: 10px 15px; border-radius: 50%; cursor: pointer; }
+        .file-label { cursor: pointer; font-size: 1.5em; }
+        #voice-btn.recording { background: red; animation: pulse 1s infinite; }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
     </style>
 </head>
 <body>
-    <h3>Чат Максим</h3>
-    <div id="chat">Загрузка...</div>
-    <input id="msg" placeholder="Твоё сообщение...">
-    <button onclick="send()">Отправить</button>
 
-    <script>
-        const scriptUrl = 'https://script.google.com/macros/s/AKfycbz1Qs_gntM888L19jM7NpJBu2HBEaP9V8VpPP4rPU1mV74KdlX-ZF2PMUSxiHfT3USN/exec';
+<div id="nick-box">
+    Ник: <input id="nick" type="text" placeholder="Твой ник" style="width: 100px;">
+    Группа: <b id="current-room-display">general</b>
+</div>
 
-        async function send() {
-            const input = document.getElementById('msg');
-            if(!input.value) return;
-            await fetch(scriptUrl, { method: 'POST', body: JSON.stringify({ user: 'Я', msg: input.value }) });
-            input.value = '';
+<div id="rooms">
+    <button class="room-btn active" onclick="changeRoom('general')">Общий</button>
+    <button class="room-btn" onclick="changeRoom('work')">Работа</button>
+    <button class="room-btn" onclick="changeRoom('games')">Игры</button>
+</div>
+
+<div id="chat">Загрузка...</div>
+
+<div id="controls">
+    <label class="file-label">
+        🖼️<input type="file" id="file-input" accept="image/*" style="display:none" onchange="sendFile(this)">
+    </label>
+    <input type="text" id="msg" placeholder="Сообщение...">
+    <button id="send-btn" onclick="sendText()">➤</button>
+    <button id="voice-btn" onmousedown="startRecording()" onmouseup="stopRecording()" ontouchstart="startRecording()" ontouchend="stopRecording()">🎤</button>
+</div>
+
+<script>
+    const scriptUrl = 'https://script.google.com/macros/s/AKfycbz1Qs_gntM888L19jM7NpJBu2HBEaP9V8VpPP4rPU1mV74KdlX-ZF2PMUSxiHfT3USN/exec';
+    let currentRoom = 'general';
+    let mediaRecorder;
+    let audioChunks = [];
+
+    // Инициализация ника
+    document.getElementById('nick').value = localStorage.getItem('chatNick') || 'Аноним';
+
+    function changeRoom(name) {
+        currentRoom = name;
+        document.querySelectorAll('.room-btn').forEach(b => b.classList.toggle('active', b.innerText.toLowerCase().includes(name)));
+        document.getElementById('current-room-display').innerText = name;
+        load();
+    }
+
+    async function apiPost(data) {
+        data.user = document.getElementById('nick').value;
+        data.room = currentRoom;
+        localStorage.setItem('chatNick', data.user);
+        try {
+            await fetch(scriptUrl, { method: 'POST', body: JSON.stringify(data) });
             load();
-        }
+        } catch(e) { alert("Ошибка отправки"); }
+    }
 
-        async function load() {
+    function sendText() {
+        const input = document.getElementById('msg');
+        if(!input.value) return;
+        apiPost({ type: 'text', msg: input.value });
+        input.value = '';
+    }
+
+    // Обработка файлов (Картинки)
+    function sendFile(input) {
+        const file = input.files[0];
+        if(!file) return;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            apiPost({ type: 'image', fileData: e.target.result });
+        };
+        reader.readAsDataURL(file);
+    }
+
+    // Голосовые сообщения
+    async function startRecording() {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(stream);
+        audioChunks = [];
+        mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+        mediaRecorder.onstop = async () => {
+            const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+            const reader = new FileReader();
+            reader.onload = e => apiPost({ type: 'audio', fileData: e.target.result });
+            reader.readAsDataURL(audioBlob);
+        };
+        mediaRecorder.start();
+        document.getElementById('voice-btn').classList.add('recording');
+    }
+
+    function stopRecording() {
+        if(mediaRecorder) mediaRecorder.stop();
+        document.getElementById('voice-btn').classList.remove('recording');
+    }
+
+    async function load() {
+        try {
             const res = await fetch(scriptUrl);
             const data = await res.json();
             const chat = document.getElementById('chat');
-            chat.innerHTML = data.map(m => `<div class="msg">${m.text || m[2]}</div>`).join('');
+            
+            // Фильтруем данные по текущей комнате
+            const filtered = data.filter(m => m[5] === currentRoom);
+            
+            chat.innerHTML = filtered.map(m => {
+                const [date, user, text, type, fileData] = m;
+                const isOut = user === document.getElementById('nick').value ? 'out' : 'in';
+                let content = `<div>${text}</div>`;
+                
+                if(type === 'image') content = `<img src="${fileData}" class="media">`;
+                if(type === 'audio') content = `<audio controls src="${fileData}" style="width:200px"></audio>`;
+                
+                return `<div class="msg ${isOut}"><div class="author">${user}</div>${content}</div>`;
+            }).join('');
+            
             chat.scrollTop = chat.scrollHeight;
-        }
+        } catch(e) { console.error("Ошибка загрузки"); }
+    }
 
-        setInterval(load, 3000); // Авто-обновление каждые 3 секунды
-        load();
-    </script>
+    setInterval(load, 8000);
+    load();
+</script>
+
 </body>
 </html>
